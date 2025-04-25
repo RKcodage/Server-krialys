@@ -37,12 +37,6 @@ app.post("/submit", async (req, res) => {
     if (!fs.existsSync("./data")) fs.mkdirSync("./data");
     fs.writeFileSync(`./data/${filename}`, JSON.stringify(data, null, 2));
 
-// GÉNÉRATION DU RÉSUMÉ HTML
-console.log("📂 Thèmes reçus :", Object.keys(data));
-console.log("📄 Type de 'Informations Utilisateur' :", typeof data["Informations Utilisateur"]);
-console.log("📦 Contenu brut :", JSON.stringify(data["Informations Utilisateur"], null, 2));
-console.log("🧪 Détail Infos Utilisateur reçues :", JSON.stringify(data["Informations Utilisateur"], null, 2));
-
     // GÉNÉRATION DU RÉSUMÉ HTML
     const htmlContent = Object.entries(data).map(([theme, responses]) => {
       if (!Array.isArray(responses)) return ""; // skip si pas un tableau
@@ -76,6 +70,28 @@ console.log("🧪 Détail Infos Utilisateur reçues :", JSON.stringify(data["Inf
       return `<h3>${theme}</h3><pre>${JSON.stringify(responses, null, 2)}</pre>`;
     }).join("<hr>");
 
+    // CALCUL DE LA MOYENNE GLOBALE
+    let allNotes = [];
+    Object.values(data).forEach((responses) => {
+      if (Array.isArray(responses)) {
+        const isScored = responses.every(
+          (r) => r && typeof r === "object" && "note" in r && "question" in r
+        );
+        if (isScored) {
+          const notes = responses.map((r) => parseFloat(r.note)).filter((n) => !isNaN(n));
+          allNotes = allNotes.concat(notes);
+        }
+      }
+    });
+
+    let globalAverageHTML = "";
+    if (allNotes.length > 0) {
+      const globalAverage = (
+        allNotes.reduce((a, b) => a + b, 0) / allNotes.length
+      ).toFixed(2);
+      globalAverageHTML = `<hr><h2>🎯 Note moyenne globale : ${globalAverage} / 5</h2>`;
+    }
+
     const transporter = nodemailer.createTransport({
       host: "smtp.office365.com",
       port: 587,
@@ -92,12 +108,11 @@ console.log("🧪 Détail Infos Utilisateur reçues :", JSON.stringify(data["Inf
     if (process.env.ADMIN_BCC_EMAIL) recipients.push(process.env.ADMIN_BCC_EMAIL);
 
     const mailOptions = {
-    from: `Krialys Form <${process.env.OUTLOOK_USER}>`,
-    to: recipients,
-    subject: `📝 Résumé du diagnostic de ${firstName} ${lastName}`.trim(),
-    html: `<h2>Résumé des réponses</h2>${htmlContent}`,
+      from: `Krialys Form <${process.env.OUTLOOK_USER}>`,
+      to: recipients,
+      subject: `📝 Résumé du diagnostic de ${firstName} ${lastName}`.trim(),
+      html: `<h2>Résumé des réponses</h2>${htmlContent}${globalAverageHTML}`,
     };
-
 
     await transporter.sendMail(mailOptions);
     console.log("✅ Email envoyé avec succès !");
