@@ -1,0 +1,146 @@
+{
+  "Informations Utilisateur": [
+    {
+      "label": "Nom",
+      "value": "Ray"
+    },
+    {
+      "label": "Prénom",
+      "value": "G"
+    },
+    {
+      "label": "E-mail",
+      "value": "gsdgs"
+    }
+  ],
+  "Accès & Autonomie": [
+    {
+      "question": "Des compétences sur les outils d’analyse ou de visualisation de données existent-elles en interne ?",
+      "note": "5"
+    },
+    {
+      "question": "Des outils de visualisation ou d’analyse sont-ils intégrés au projet ?",
+      "note": "3"
+    },
+    {
+      "question": "Les utilisateurs métiers ont-ils accès aux indicateurs ou aux analyses ?",
+      "note": "5"
+    },
+    {
+      "question": "Les utilisateurs ont-ils accès à des informations claires sur les données (origine, signification...) ?",
+      "note": "4"
+    },
+    {
+      "question": "Des règles d’accès aux données ont-elles été formalisées ?",
+      "note": "4"
+    },
+    {
+      "question": "Des dispositifs de traçabilité des accès et usages des données sont-ils en place ?",
+      "note": "5"
+    },
+    {
+      "question": "Les outils choisis sont-ils adaptés à l’autonomie des utilisateurs dans l’exploitation des données ?",
+      "note": "3"
+    },
+    {
+      "question": "Les règles d’usage des données (accès, qualité, sécurité) sont-elles partagées avec les métiers ?",
+      "note": "5"
+    }
+  ],
+  "Culture & Engagement": [
+    {
+      "question": "Avez-vous identifié des collaborateurs naturellement attirés par les sujets data ?",
+      "note": "3"
+    },
+    {
+      "question": "Les collaborateurs sont-ils sensibilisés à l’impact stratégique de la donnée ?",
+      "note": "4"
+    }
+  ],
+  "Pilotage & Décision": [
+    {
+      "question": "Produisez-vous vos reportings rapidement et de manière autonome ?",
+      "note": "4"
+    },
+    {
+      "question": "La donnée est-elle déjà un levier reconnu dans la prise de décision stratégique ?",
+      "note": "4"
+    },
+    {
+      "question": "Les projets data font-ils l’objet d’un pilotage dédié et structuré ?",
+      "note": "5"
+    },
+    {
+      "question": "Les utilisateurs métiers peuvent-ils accéder de façon autonome aux reportings ou tableaux de bord ?",
+      "note": "4"
+    },
+    {
+      "question": "Les reportings produits sont-ils clairs, fiables et utiles à la prise de décision ?",
+      "note": "4"
+    },
+    {
+      "question": "Les décisions prises à partir des données sont-elles retracées et documentées ?",
+      "note": "3"
+    },
+    {
+      "question": "Les métiers peuvent-ils tracer l’origine des données utilisées dans leurs reportings ?",
+      "note": "4"
+    },
+    {
+      "question": "Les métiers rencontrent-ils régulièrement des erreurs ou des données manquantes dans leurs reportings ?",
+      "note": "5"
+    }
+  ],
+  "Qualité & Fiabilité": [
+    {
+      "question": "La qualité des reportings est-elle globalement maîtrisée ?",
+      "note": "4"
+    },
+    {
+      "question": "Des indicateurs de qualité sont-ils suivis dans le projet ?",
+      "note": "4"
+    },
+    {
+      "question": "Les utilisateurs métiers sont-ils impliqués dans la gestion de la qualité ?",
+      "note": "4"
+    },
+    {
+      "question": "Des contrôles de qualité sont-ils visibles et compréhensibles pour les utilisateurs ?",
+      "note": "4"
+    }
+  ],
+  "Usages Métiers": [
+    {
+      "question": "Les équipes métiers manifestent-elles une appétence à s’approprier la donnée dans leurs usages ?",
+      "note": "5"
+    },
+    {
+      "question": "Des règles de confidentialité et d’usage des données sont-elles définies et respectées ?",
+      "note": "4"
+    },
+    {
+      "question": "Vos données sont-elles centralisées et prêtes à être réutilisées dans différents usages ?",
+      "note": "5"
+    },
+    {
+      "question": "L’entreprise considère-t-elle la donnée comme un axe de création de valeur ?",
+      "note": "5"
+    },
+    {
+      "question": "Des cas d’usage concrets sont-ils identifiés pour valoriser les données du projet ?",
+      "note": "4"
+    },
+    {
+      "question": "Des cas d’usage concrets ont-ils été implémentés et mesurés dans le projet ?",
+      "note": "5"
+    },
+    {
+      "question": "Les utilisateurs savent-ils facilement interpréter les données (définition, source, fréquence) ?",
+      "note": "5"
+    },
+    {
+      "question": "La suppression ou l’archivage des données suit-elle un cycle connu des utilisateurs ?",
+      "note": "5"
+    }
+  ]
+}
