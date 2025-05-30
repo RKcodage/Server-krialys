@@ -23,16 +23,27 @@ app.post("/submit", async (req, res) => {
   const lastName = getField("Nom");
   const email = getField("E-mail");
 
-  // 🧼 Nettoyage du nom pour le fichier
+  // Nettoyage du nom pour le fichier
   const clean = str => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-");
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const filename = `responses-${clean(lastName)}-${clean(firstName)}-${timestamp}.json`;
+
+  // Fonction de recommandation
+  function getRecommendation(score) {
+    const s = parseFloat(score);
+    if (isNaN(s)) return "Score invalide";
+    if (s >= 4.5) return "Niveau 5/5 : Optimized";
+    if (s >= 3.5) return "Niveau 4/5 : Quantitatively Managed / Measured";
+    if (s >= 2.5) return "Niveau 3/5 : Defined";
+    if (s >= 1.5) return "Niveau 2/5 : Managed";
+    return "Niveau 1/5 : Initial";
+  }
 
   try {
     if (!fs.existsSync("./data")) fs.mkdirSync("./data");
     fs.writeFileSync(`./data/${filename}`, JSON.stringify(data, null, 2));
 
-    // 💬 Bloc commentaire (géré en dehors de .map)
+    // Bloc commentaire
     let commentaireHTML = "";
     if ("Commentaire" in data) {
       const comment = String(data["Commentaire"]).trim();
@@ -45,60 +56,78 @@ app.post("/submit", async (req, res) => {
       `;
     }
 
-    // 📋 Génération du HTML des autres blocs
+    // Génération des blocs
     let htmlThemes = "";
-let htmlResumeTable = "";
+    let htmlResumeTable = "";
 
-Object.entries(data).forEach(([theme, responses]) => {
-  const normalized = theme.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    Object.entries(data).forEach(([theme, responses]) => {
+      const normalized = theme.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-  if (normalized === "commentaire") return;
+      if (normalized === "commentaire") return;
 
-  // Résumé → extrait dans htmlResumeTable uniquement
-  if (normalized.includes("resume")) {
-    htmlResumeTable = `
-      <h3>${theme}</h3>
-      <table style="border-collapse: collapse; width: 100%; max-width: 700px;">
-        <thead>
-          <tr style="background-color: #333; color: white;">
-            <th style="padding: 8px; border: 1px solid #ccc;">Thème</th>
-            <th style="padding: 8px; border: 1px solid #ccc;">Score</th>
-            <th style="padding: 8px; border: 1px solid #ccc;">Recommandation</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${responses.map(r => `
-            <tr>
-              <td style="padding: 8px; border: 1px solid #ccc;">${r.theme}</td>
-              <td style="padding: 8px; border: 1px solid #ccc;">${r.score}</td>
-              <td style="padding: 8px; border: 1px solid #ccc;">${r.recommendation}</td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    `;
-    return;
-  }
+      if (normalized.includes("resume")) {
+        htmlResumeTable = `
+          <h3>${theme}</h3>
+          <table style="border-collapse: collapse; width: 100%; max-width: 700px;">
+            <thead>
+              <tr style="background-color: #333; color: white;">
+                <th style="padding: 8px; border: 1px solid #ccc;">Thème</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Score</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Recommandation</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${responses.map(r => `
+                <tr>
+                  <td style="padding: 8px; border: 1px solid #ccc;">${r.theme}</td>
+                  <td style="padding: 8px; border: 1px solid #ccc;">${r.score}</td>
+                  <td style="padding: 8px; border: 1px solid #ccc;">${getRecommendation(r.score)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        `;
+        return;
+      }
 
-  // Infos utilisateur
-  const isInfo = Array.isArray(responses) && responses.every(r => "label" in r && "value" in r);
-  if (isInfo) {
-    htmlThemes += `<h3>${theme}</h3><ul>${responses.map(r => `<li><strong>${r.label} :</strong> ${r.value}</li>`).join("")}</ul><hr>`;
-    return;
-  }
+      const isInfo = Array.isArray(responses) && responses.every(r => "label" in r && "value" in r);
+      if (isInfo) {
+        htmlThemes += `<h3>${theme}</h3><ul>${responses.map(r => `<li><strong>${r.label} :</strong> ${r.value}</li>`).join("")}</ul><hr>`;
+        return;
+      }
 
-  // Notes scorées
-  const isScored = Array.isArray(responses) && responses.every(r => "note" in r && "question" in r);
-  if (isScored) {
-    const avg = (
-      responses.reduce((sum, r) => sum + parseFloat(r.note), 0) / responses.length
-    ).toFixed(2);
-    htmlThemes += `<h3>${theme}</h3><p><strong>Note moyenne :</strong> ${avg} / 5</p><ul>${responses.map(r => `<li>(${r.note}/5) - ${r.question}</li>`).join("")}</ul><hr>`;
-  }
-});
+      // Notes scorées
+      const isScored = Array.isArray(responses) && responses.every(r => "note" in r && "question" in r);
+      if (isScored) {
+        const avg = (
+          responses.reduce((sum, r) => sum + parseFloat(r.note), 0) / responses.length
+        ).toFixed(2);
 
+        htmlThemes += `
+          <h3>${theme}</h3>
+          <p><strong>Note moyenne :</strong> ${avg} / 5</p>
+          <table style="border-collapse: collapse; width: 100%; max-width: 700px;">
+            <thead>
+              <tr style="background-color: #333; color: white;">
+                <th style="padding: 8px; border: 1px solid #ccc;">Question</th>
+                <th style="padding: 8px; border: 1px solid #ccc;">Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${responses.map(r => `
+                <tr>
+                  <td style="padding: 8px; border: 1px solid #ccc;">${r.question}</td>
+                  <td style="padding: 8px; border: 1px solid #ccc;">${r.note} / 5</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+          <hr>
+        `;
+      }
+    });
 
-    // 🔢 Moyenne globale
+    // Moyenne globale
     let allNotes = [];
     Object.values(data).forEach((responses) => {
       if (Array.isArray(responses)) {
@@ -116,7 +145,7 @@ Object.entries(data).forEach(([theme, responses]) => {
       globalAverageHTML = `<hr><h2>🎯 Note moyenne globale : ${globalAverage} / 5</h2>`;
     }
 
-    // ✉️ Envoi du mail
+    // Configuration transporteur
     const transporter = nodemailer.createTransport({
       host: "smtp.office365.com",
       port: 587,
@@ -127,16 +156,16 @@ Object.entries(data).forEach(([theme, responses]) => {
       },
     });
 
-    const recipients = [];
-    if (email) recipients.push(email);
-    if (process.env.ADMIN_BCC_EMAIL) recipients.push(process.env.ADMIN_BCC_EMAIL);
+    // Admin email
+    const recipientsAdmin = [];
+    if (process.env.ADMIN_BCC_EMAIL) recipientsAdmin.push(process.env.ADMIN_BCC_EMAIL);
 
-    const mailOptions = {
+    const mailOptionsAdmin = {
       from: `Krialys Form <${process.env.OUTLOOK_USER}>`,
-      to: recipients,
-      subject: `📝 Résumé du diagnostic de ${firstName} ${lastName}`.trim(),
+      to: recipientsAdmin,
+      subject: `📝 Résumé complet du diagnostic de ${firstName} ${lastName}`.trim(),
       html: `
-        <h2>Résumé des réponses</h2>
+        <h2>Résumé des réponses par thématique</h2>
         ${htmlThemes}
         ${commentaireHTML}
         <h2>Résumé synthétique</h2>
@@ -145,15 +174,30 @@ Object.entries(data).forEach(([theme, responses]) => {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
-    console.log("✅ Email envoyé avec succès !");
-    res.status(200).json({ message: "Réponses enregistrées et email envoyé avec succès." });
+    // Utilisateur email
+    const mailOptionsUser = {
+      from: `Krialys Form <${process.env.OUTLOOK_USER}>`,
+      to: email,
+      subject: `📊 Résumé de votre diagnostic`,
+      html: `
+        <h2>Résumé synthétique</h2>
+        ${htmlResumeTable}
+        ${globalAverageHTML}
+      `,
+    };
+
+    if (recipientsAdmin.length > 0) await transporter.sendMail(mailOptionsAdmin);
+    if (email) await transporter.sendMail(mailOptionsUser);
+
+    console.log("✅ Emails envoyés avec succès !");
+    res.status(200).json({ message: "Réponses enregistrées et emails envoyés avec succès." });
 
   } catch (err) {
     console.error("❌ Erreur backend :", err);
     res.status(500).json({ message: "Erreur serveur" });
   }
 });
+
 
 app.listen(PORT, () => {
   console.log(`✅ Serveur opérationnel sur http://localhost:${PORT}`);
