@@ -505,7 +505,7 @@ app.post("/submit-radar", async (req, res) => {
     });
 
     const html = `
-      <h2 style="font-family:sans-serif;">Nouveau diagnostic maturité reçu : ${formTitle}</h2>
+      <h2 style="font-family:sans-serif;">Nouveau diagnostic de maturité reçu pour ${user.company}: ${formTitle}</h2>
       <p><strong>Nom :</strong> ${user.lastName || "Non renseigné"}</p>
        <p><strong>Prénom:</strong> ${user.firstName || "Non renseigné"}</p>
       <p><strong>Email :</strong> ${user.email || "Non renseigné"}</p>
