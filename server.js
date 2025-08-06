@@ -10,6 +10,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// Submit route for diagnostic
 app.post("/submit", async (req, res) => {
   const data = req.body;
   console.log("📦 Données reçues :", JSON.stringify(data, null, 2));
@@ -44,11 +45,11 @@ app.post("/submit", async (req, res) => {
     fs.writeFileSync(`./data/${filename}`, JSON.stringify(data, null, 2));
 
     // Bloc commentaire
-    let commentaireHTML = "";
+    let Comment = "";
     if ("Commentaire" in data) {
       const comment = String(data["Commentaire"]).trim();
-      commentaireHTML = `
-        <h3>🗨️ Commentaire de l'utilisateur</h3>
+      Comment = `
+        <h2>Commentaire de l'utilisateur</h2>
         <p style="padding: 1rem; background-color: #f4f4f4; border-left: 4px solid #2C6474;">
           ${comment || "<em>Aucun commentaire renseigné.</em>"}
         </p>
@@ -56,76 +57,83 @@ app.post("/submit", async (req, res) => {
       `;
     }
 
-    // Génération des blocs
-    let htmlThemes = "";
-    let htmlResumeTable = "";
+    
+   // Génération des blocs
+let ResponsesByThemes = "";
+let Resume = "";
 
-    Object.entries(data).forEach(([theme, responses]) => {
-      const normalized = theme.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+// Nouveau tableau unique pour toutes les réponses scorées
+let allScoredRows = [];
 
-      if (normalized === "commentaire") return;
+Object.entries(data).forEach(([theme, responses]) => {
+  const normalized = theme.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-      if (normalized.includes("resume")) {
-        htmlResumeTable = `
-          <h3>${theme}</h3>
-          <table style="border-collapse: collapse; width: 100%; max-width: 700px;">
-            <thead>
-              <tr style="background-color: #333; color: white;">
-                <th style="padding: 8px; border: 1px solid #ccc;">Thème</th>
-                <th style="padding: 8px; border: 1px solid #ccc;">Score</th>
-                <th style="padding: 8px; border: 1px solid #ccc;">Recommandation</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${responses.map(r => `
-                <tr>
-                  <td style="padding: 8px; border: 1px solid #ccc;">${r.theme}</td>
-                  <td style="padding: 8px; border: 1px solid #ccc;">${r.score}</td>
-                  <td style="padding: 8px; border: 1px solid #ccc;">${getRecommendation(r.score)}</td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-        `;
-        return;
-      }
+  if (normalized === "commentaire") return;
 
-      const isInfo = Array.isArray(responses) && responses.every(r => "label" in r && "value" in r);
-      if (isInfo) {
-        htmlThemes += `<h3>${theme}</h3><ul>${responses.map(r => `<li><strong>${r.label} :</strong> ${r.value}</li>`).join("")}</ul><hr>`;
-        return;
-      }
+  if (normalized.includes("resume")) {
+    Resume = `
+      <h2>Résumé synthétique</h2>
+      <table style="border-collapse: collapse; width: 100%; max-width: 700px;">
+        <thead>
+          <tr style="background-color: #333; color: white;">
+            <th style="padding: 8px; border: 1px solid #ccc;">Thème</th>
+            <th style="padding: 8px; border: 1px solid #ccc;">Score</th>
+            <th style="padding: 8px; border: 1px solid #ccc;">Recommandation</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${responses.map(r => `
+            <tr>
+              <td style="padding: 8px; border: 1px solid #ccc;">${r.theme}</td>
+              <td style="padding: 8px; border: 1px solid #ccc;">${r.score}</td>
+              <td style="padding: 8px; border: 1px solid #ccc;">${getRecommendation(r.score)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+    return;
+  }
 
-      // Notes scorées
-      const isScored = Array.isArray(responses) && responses.every(r => "note" in r && "question" in r);
-      if (isScored) {
-        const avg = (
-          responses.reduce((sum, r) => sum + parseFloat(r.note), 0) / responses.length
-        ).toFixed(2);
+  const isInfo = Array.isArray(responses) && responses.every(r => "label" in r && "value" in r);
+  if (isInfo) {
+    ResponsesByThemes += `<h2>${theme}</h2><ul>${responses.map(r => `<li><strong>${r.label} :</strong> ${r.value}</li>`).join("")}</ul><hr>`;
+    return;
+  }
 
-        htmlThemes += `
-          <h3>${theme}</h3>
-          <p><strong>Note moyenne :</strong> ${avg} / 5</p>
-          <table style="border-collapse: collapse; width: 100%; max-width: 700px;">
-            <thead>
-              <tr style="background-color: #333; color: white;">
-                <th style="padding: 8px; border: 1px solid #ccc;">Question</th>
-                <th style="padding: 8px; border: 1px solid #ccc;">Note</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${responses.map(r => `
-                <tr>
-                  <td style="padding: 8px; border: 1px solid #ccc;">${r.question}</td>
-                  <td style="padding: 8px; border: 1px solid #ccc;">${r.note} / 5</td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-          <hr>
-        `;
-      }
+  const isScored = Array.isArray(responses) && responses.every(r => "note" in r && "question" in r);
+  if (isScored) {
+    responses.forEach(r => {
+      allScoredRows.push(`
+        <tr>
+          <td style="padding: 8px; border: 1px solid #ccc;">${theme}</td>
+          <td style="padding: 8px; border: 1px solid #ccc;">${r.question}</td>
+          <td style="padding: 8px; border: 1px solid #ccc; text-align:center;">${parseFloat(r.note)}</td>
+        </tr>
+      `);
     });
+  }
+});
+
+// Une seule table pour toutes les réponses scorées
+if (allScoredRows.length > 0) {
+  ResponsesByThemes += `
+    <h2>Détail des réponses par thématiques</h2>
+    <table style="border-collapse: collapse; width: 100%; max-width: 700px;">
+      <thead>
+        <tr style="background-color: #333; color: white;">
+          <th style="padding: 8px; border: 1px solid #ccc;">Thème</th>
+          <th style="padding: 8px; border: 1px solid #ccc;">Question</th>
+          <th style="padding: 8px; border: 1px solid #ccc;">Note</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${allScoredRows.join("")}
+      </tbody>
+    </table>
+    <hr>
+  `;
+  }
 
     // Moyenne globale
     let allNotes = [];
@@ -139,10 +147,10 @@ app.post("/submit", async (req, res) => {
       }
     });
 
-    let globalAverageHTML = "";
+    let GlobalAverage = "";
     if (allNotes.length > 0) {
       const globalAverage = (allNotes.reduce((a, b) => a + b, 0) / allNotes.length).toFixed(2);
-      globalAverageHTML = `<hr><h2>🎯 Note moyenne globale : ${globalAverage} / 5</h2>`;
+      GlobalAverage = `<hr><h2>🎯 Note moyenne globale : ${globalAverage} / 5</h2>`;
     }
 
     // Configuration transporteur
@@ -165,16 +173,14 @@ app.post("/submit", async (req, res) => {
       to: recipientsAdmin,
       subject: `📝 Résumé complet du diagnostic de ${firstName} ${lastName}`.trim(),
       html: `
-        <h2>Résumé des réponses par thématique</h2>
-        ${htmlThemes}
-        ${commentaireHTML}
-        <h2>Résumé synthétique</h2>
-        ${htmlResumeTable}
-        ${globalAverageHTML}
+        ${ResponsesByThemes}
+        ${Comment}
+        ${Resume}
+        ${GlobalAverage}
       `,
     };
 
-    // Utilisateur email
+    // User email
     const mailOptionsUser = {
       from: `Krialys Form <${process.env.OUTLOOK_USER}>`,
       to: email,
@@ -454,7 +460,6 @@ app.post("/submit", async (req, res) => {
   </table>
 </body>
 </html>
-
       `,
     };
 
@@ -470,6 +475,83 @@ app.post("/submit", async (req, res) => {
   }
 });
 
+// Submit route for radar forms
+app.post("/submit-radar", async (req, res) => {
+  try {
+
+    console.dir(req.body, { depth: null });
+    const { questions, comment, globalAverage, formNum } = req.body;
+
+    // 🧠 1. Titre du formulaire
+    const formTitles = {
+      1: "Évaluation Stratégique et Organisationnelle",
+      2: "Évaluation Opérationnelle Métiers",
+      3: "Évaluation Technique et Data Management",
+    };
+    const formTitle = formTitles[formNum] || `Formulaire ${formNum}`;
+
+    const { user = {} } = req.body;
+
+    // 📊 3. Format HTML du tableau récapitulatif
+    let rows = "";
+    questions.forEach(theme => {
+      theme.responses.forEach(r => {
+        rows += `<tr>
+          <td style="border:1px solid #ddd;padding:8px;">${theme.theme}</td>
+          <td style="border:1px solid #ddd;padding:8px;">${r.question}</td>
+          <td style="border:1px solid #ddd;padding:8px;text-align:center;">${r.note}</td>
+        </tr>`;
+      });
+    });
+
+    const html = `
+      <h2 style="font-family:sans-serif;">Nouveau diagnostic maturité reçu : ${formTitle}</h2>
+      <p><strong>Nom :</strong> ${user.lastName || "Non renseigné"}</p>
+       <p><strong>Prénom:</strong> ${user.firstName || "Non renseigné"}</p>
+      <p><strong>Email :</strong> ${user.email || "Non renseigné"}</p>
+      <p><strong>Téléphone :</strong> ${user.phone || "Non renseigné"}</p>
+      <p><strong>Entreprise :</strong> ${user.company || "Non renseigné"}</p>
+      <p><strong>Note moyenne :</strong> ${globalAverage || "N/A"}</p>
+      <p><strong>Commentaire :</strong> ${comment || ""}</p>
+      <h3 style="font-family:sans-serif;margin-top:2rem;">Détail des réponses :</h3>
+      <table style="border-collapse:collapse;width:100%;font-family:sans-serif;">
+        <thead>
+          <tr>
+            <th style="border:1px solid #ddd;padding:8px;background:#eee;">Thème</th>
+            <th style="border:1px solid #ddd;padding:8px;background:#eee;">Question</th>
+            <th style="border:1px solid #ddd;padding:8px;background:#eee;">Note</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+
+    // Configuration transporteur
+    const transporter = nodemailer.createTransport({
+      host: "smtp.office365.com",
+      port: 587,
+      secure: false,
+      auth: {
+        user: process.env.OUTLOOK_USER,
+        pass: process.env.OUTLOOK_PASS,
+      },
+    });
+
+    // Envoi de l’e-mail
+    await transporter.sendMail({
+      from: `"Krialys Radar de maturité" <${process.env.OUTLOOK_USER}>`,
+      to: process.env.ADMIN_BCC_EMAIL,
+      subject: `Radar de maturité - ${formTitle}`,
+      html,
+    });
+
+    res.status(200).json({ message: "Radar de maturité envoyé avec succès" });
+
+  } catch (error) {
+    console.error("Erreur envoi radar de maturité :", error);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`✅ Serveur opérationnel sur http://localhost:${PORT}`);
