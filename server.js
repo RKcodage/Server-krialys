@@ -2,6 +2,8 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const nodemailer = require("nodemailer");
+const ExcelJS = require("exceljs");
+const path = require("path");
 const fs = require("fs");
 const app = express();
 
@@ -9,6 +11,14 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Fonction de nettoyage des titres des formulaires 
+const clean = str =>
+  str.normalize("NFD") // enlève accents
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9-_ ]/g, "") // enlève caractères spéciaux
+    .replace(/\s+/g, "-"); // remplace espaces par tirets
+
 
 // Submit route for diagnostic
 app.post("/submit", async (req, res) => {
@@ -58,82 +68,82 @@ app.post("/submit", async (req, res) => {
     }
 
     
-   // Génération des blocs
-let ResponsesByThemes = "";
-let Resume = "";
+  // Génération des blocs
+  let ResponsesByThemes = "";
+  let Resume = "";
 
-// Nouveau tableau unique pour toutes les réponses scorées
-let allScoredRows = [];
+  // Nouveau tableau unique pour toutes les réponses scorées
+  let allScoredRows = [];
 
-Object.entries(data).forEach(([theme, responses]) => {
-  const normalized = theme.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  Object.entries(data).forEach(([theme, responses]) => {
+    const normalized = theme.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-  if (normalized === "commentaire") return;
+    if (normalized === "commentaire") return;
 
-  if (normalized.includes("resume")) {
-    Resume = `
-      <h2>Résumé synthétique</h2>
+    if (normalized.includes("resume")) {
+      Resume = `
+        <h2>Résumé synthétique</h2>
+        <table style="border-collapse: collapse; width: 100%; max-width: 700px;">
+          <thead>
+            <tr style="background-color: #333; color: white;">
+              <th style="padding: 8px; border: 1px solid #ccc;">Thème</th>
+              <th style="padding: 8px; border: 1px solid #ccc;">Score</th>
+              <th style="padding: 8px; border: 1px solid #ccc;">Recommandation</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${responses.map(r => `
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ccc;">${r.theme}</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">${r.score}</td>
+                <td style="padding: 8px; border: 1px solid #ccc;">${getRecommendation(r.score)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+      return;
+    }
+
+    const isInfo = Array.isArray(responses) && responses.every(r => "label" in r && "value" in r);
+    if (isInfo) {
+      ResponsesByThemes += `<h2>${theme}</h2><ul>${responses.map(r => `<li><strong>${r.label} :</strong> ${r.value}</li>`).join("")}</ul><hr>`;
+      return;
+    }
+
+    const isScored = Array.isArray(responses) && responses.every(r => "note" in r && "question" in r);
+    if (isScored) {
+      responses.forEach(r => {
+        allScoredRows.push(`
+          <tr>
+            <td style="padding: 8px; border: 1px solid #ccc;">${theme}</td>
+            <td style="padding: 8px; border: 1px solid #ccc;">${r.question}</td>
+            <td style="padding: 8px; border: 1px solid #ccc; text-align:center;">${parseFloat(r.note)}</td>
+          </tr>
+        `);
+      });
+    }
+  });
+
+  // Une seule table pour toutes les réponses scorées
+  if (allScoredRows.length > 0) {
+    ResponsesByThemes += `
+      <h2>Détail des réponses par thématiques</h2>
       <table style="border-collapse: collapse; width: 100%; max-width: 700px;">
         <thead>
           <tr style="background-color: #333; color: white;">
             <th style="padding: 8px; border: 1px solid #ccc;">Thème</th>
-            <th style="padding: 8px; border: 1px solid #ccc;">Score</th>
-            <th style="padding: 8px; border: 1px solid #ccc;">Recommandation</th>
+            <th style="padding: 8px; border: 1px solid #ccc;">Question</th>
+            <th style="padding: 8px; border: 1px solid #ccc;">Note</th>
           </tr>
         </thead>
         <tbody>
-          ${responses.map(r => `
-            <tr>
-              <td style="padding: 8px; border: 1px solid #ccc;">${r.theme}</td>
-              <td style="padding: 8px; border: 1px solid #ccc;">${r.score}</td>
-              <td style="padding: 8px; border: 1px solid #ccc;">${getRecommendation(r.score)}</td>
-            </tr>
-          `).join("")}
+          ${allScoredRows.join("")}
         </tbody>
       </table>
+      <hr>
     `;
-    return;
-  }
-
-  const isInfo = Array.isArray(responses) && responses.every(r => "label" in r && "value" in r);
-  if (isInfo) {
-    ResponsesByThemes += `<h2>${theme}</h2><ul>${responses.map(r => `<li><strong>${r.label} :</strong> ${r.value}</li>`).join("")}</ul><hr>`;
-    return;
-  }
-
-  const isScored = Array.isArray(responses) && responses.every(r => "note" in r && "question" in r);
-  if (isScored) {
-    responses.forEach(r => {
-      allScoredRows.push(`
-        <tr>
-          <td style="padding: 8px; border: 1px solid #ccc;">${theme}</td>
-          <td style="padding: 8px; border: 1px solid #ccc;">${r.question}</td>
-          <td style="padding: 8px; border: 1px solid #ccc; text-align:center;">${parseFloat(r.note)}</td>
-        </tr>
-      `);
-    });
-  }
-});
-
-// Une seule table pour toutes les réponses scorées
-if (allScoredRows.length > 0) {
-  ResponsesByThemes += `
-    <h2>Détail des réponses par thématiques</h2>
-    <table style="border-collapse: collapse; width: 100%; max-width: 700px;">
-      <thead>
-        <tr style="background-color: #333; color: white;">
-          <th style="padding: 8px; border: 1px solid #ccc;">Thème</th>
-          <th style="padding: 8px; border: 1px solid #ccc;">Question</th>
-          <th style="padding: 8px; border: 1px solid #ccc;">Note</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${allScoredRows.join("")}
-      </tbody>
-    </table>
-    <hr>
-  `;
-  }
+    }
 
     // Moyenne globale
     let allNotes = [];
@@ -152,6 +162,57 @@ if (allScoredRows.length > 0) {
       const globalAverage = (allNotes.reduce((a, b) => a + b, 0) / allNotes.length).toFixed(2);
       GlobalAverage = `<hr><h2>🎯 Note moyenne globale : ${globalAverage} / 5</h2>`;
     }
+
+    
+// Génération fichier Excel
+const workbook = new ExcelJS.Workbook();
+
+// Feuille : Réponses par thématique
+const sheetResponses = workbook.addWorksheet("Réponses par thématique");
+sheetResponses.columns = [
+  { header: "Thème", key: "theme", width: 30 },
+  { header: "Question", key: "question", width: 80 },
+  { header: "Note", key: "note", width: 10 },
+];
+
+Object.entries(data).forEach(([theme, responses]) => {
+  const isScored = Array.isArray(responses) && responses.every(r => "note" in r && "question" in r);
+  if (isScored) {
+    responses.forEach(r => {
+      sheetResponses.addRow({
+        theme,
+        question: r.question,
+        note: parseFloat(r.note),
+      });
+    });
+  }
+});
+
+// Feuille : Résumé synthétique
+const sheetSummary = workbook.addWorksheet("Résumé synthétique");
+sheetSummary.columns = [
+  { header: "Thème", key: "theme", width: 40 },
+  { header: "Score", key: "score", width: 10 },
+  { header: "Recommandation", key: "recommendation", width: 60 },
+];
+
+Object.entries(data).forEach(([theme, responses]) => {
+  const normalized = theme.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (normalized.includes("resume")) {
+    responses.forEach(r => {
+      sheetSummary.addRow({
+        theme: r.theme,
+        score: r.score,
+        recommendation: getRecommendation(r.score),
+      });
+    });
+  }
+});
+
+// Sauvegarde temporaire
+const excelFilePath = path.join(__dirname, "data", filename.replace(".json", ".xlsx"));
+await workbook.xlsx.writeFile(excelFilePath);
+
 
     // Configuration transporteur
     const transporter = nodemailer.createTransport({
@@ -178,6 +239,13 @@ if (allScoredRows.length > 0) {
         ${Resume}
         ${GlobalAverage}
       `,
+      attachments: [
+        {
+          filename: "diagnostic.xlsx",
+          path: excelFilePath,
+          contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        }
+      ]
     };
 
     // User email
@@ -187,279 +255,279 @@ if (allScoredRows.length > 0) {
       subject: `📊 Résumé de votre diagnostic`,
       html: `
     <!DOCTYPE html>
-<html xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" lang="fr">
-<head>
-  <title></title>
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="color-scheme" content="only light">
-  <meta name="supported-color-schemes" content="light">
-  <!--[if mso]>
-  <style>
-    body, table, td { background-color: #ff8426 !important; }
-  </style>
-  <![endif]-->
-</head>
-<body style="background-color: #ff8426; margin: 0; padding: 0; -webkit-text-size-adjust: none; text-size-adjust: none;">
-  <div style="display:none; color:#ff8426; background-color:#ff8426;"></div>
-  <table class="nl-container" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #ff8426;">
-    <tbody>
-      <tr>
-        <td style="background-color: #ff8426;">
-          <!-- BLOC LOGO -->
-          <table class="row row-1" align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #ff8426;">
-            <tbody>
-              <tr>
-                <td style="background-color: #ff8426;">
-                  <table class="row-content stack" align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #ff8426; width: 775px; margin: 0 auto;">
-                    <tbody>
-                      <tr>
-                        <td class="column column-1" width="100%" style="background-color: #ff8426; padding-bottom: 30px; padding-top: 30px; vertical-align: top;">
-                          <table class="image_block block-1" width="100%" border="0" cellpadding="10" cellspacing="0" role="presentation" style="background-color: #ff8426;">
+      <html xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" lang="fr">
+      <head>
+        <title></title>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="color-scheme" content="only light">
+        <meta name="supported-color-schemes" content="light">
+        <!--[if mso]>
+        <style>
+          body, table, td { background-color: #ff8426 !important; }
+        </style>
+        <![endif]-->
+      </head>
+      <body style="background-color: #ff8426; margin: 0; padding: 0; -webkit-text-size-adjust: none; text-size-adjust: none;">
+        <div style="display:none; color:#ff8426; background-color:#ff8426;"></div>
+        <table class="nl-container" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #ff8426;">
+          <tbody>
+            <tr>
+              <td style="background-color: #ff8426;">
+                <!-- BLOC LOGO -->
+                <table class="row row-1" align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #ff8426;">
+                  <tbody>
+                    <tr>
+                      <td style="background-color: #ff8426;">
+                        <table class="row-content stack" align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #ff8426; width: 775px; margin: 0 auto;">
+                          <tbody>
                             <tr>
-                              <td class="pad" style="background-color: #ff8426;">
-                                <div class="alignment" align="center">
-                                  <div style="max-width: 155px;">
-                                    <img src="https://0a924af5d3.imgdist.com/pub/bfra/5yitdg4a/uhc/akj/qpt/Logo_Krialys_2022_blanc.png" style="display: block; height: auto; border: 0; width: 100%; background: #ff8426;" width="155" alt title height="auto">
-                                  </div>
-                                </div>
+                              <td class="column column-1" width="100%" style="background-color: #ff8426; padding-bottom: 30px; padding-top: 30px; vertical-align: top;">
+                                <table class="image_block block-1" width="100%" border="0" cellpadding="10" cellspacing="0" role="presentation" style="background-color: #ff8426;">
+                                  <tr>
+                                    <td class="pad" style="background-color: #ff8426;">
+                                      <div class="alignment" align="center">
+                                        <div style="max-width: 155px;">
+                                          <img src="https://0a924af5d3.imgdist.com/pub/bfra/5yitdg4a/uhc/akj/qpt/Logo_Krialys_2022_blanc.png" style="display: block; height: auto; border: 0; width: 100%; background: #ff8426;" width="155" alt title height="auto">
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                </table>
                               </td>
                             </tr>
-                          </table>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <!-- BLOC REMERCIEMENT -->
-          <table class="row row-2" align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #ff8426;">
-            <tbody>
-              <tr>
-                <td style="background-color: #ff8426;">
-                  <table class="row-content stack" align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #ff8426; width: 775px; margin: 0 auto;">
-                    <tbody>
-                      <tr>
-                        <td class="column column-1" width="100%" style="background-color: #ff8426; padding-bottom: 5px; padding-top: 5px; vertical-align: top;">
-                          <table class="paragraph_block block-1" width="100%" border="0" cellpadding="10" cellspacing="0" role="presentation" style="background-color: #ff8426;">
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <!-- BLOC REMERCIEMENT -->
+                <table class="row row-2" align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #ff8426;">
+                  <tbody>
+                    <tr>
+                      <td style="background-color: #ff8426;">
+                        <table class="row-content stack" align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #ff8426; width: 775px; margin: 0 auto;">
+                          <tbody>
                             <tr>
-                              <td class="pad" style="background-color: #ff8426;">
-                                <div style="color:#ffffff; font-family:Arial, Helvetica, sans-serif;font-size:35px; font-weight:400; line-height:1.2; text-align:center;">
-                                  <p style="margin: 0;">Merci d'avoir complété le questionnaire</p>
-                                </div>
+                              <td class="column column-1" width="100%" style="background-color: #ff8426; padding-bottom: 5px; padding-top: 5px; vertical-align: top;">
+                                <table class="paragraph_block block-1" width="100%" border="0" cellpadding="10" cellspacing="0" role="presentation" style="background-color: #ff8426;">
+                                  <tr>
+                                    <td class="pad" style="background-color: #ff8426;">
+                                      <div style="color:#ffffff; font-family:Arial, Helvetica, sans-serif;font-size:35px; font-weight:400; line-height:1.2; text-align:center;">
+                                        <p style="margin: 0;">Merci d'avoir complété le questionnaire</p>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                </table>
                               </td>
                             </tr>
-                          </table>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <!-- BLOC TEXTE SUIVANT -->
-          <table class="row row-3" align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #ff8426;">
-            <tbody>
-              <tr>
-                <td style="background-color: #ff8426;">
-                  <table class="row-content stack" align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #ff8426; width: 775px; margin: 0 auto;">
-                    <tbody>
-                      <tr>
-                        <td class="column column-1" width="100%" style="background-color: #ff8426; padding-bottom: 30px; vertical-align: top;">
-                          <table class="paragraph_block block-1" width="100%" border="0" cellpadding="10" cellspacing="0" role="presentation" style="background-color: #ff8426;">
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <!-- BLOC TEXTE SUIVANT -->
+                <table class="row row-3" align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #ff8426;">
+                  <tbody>
+                    <tr>
+                      <td style="background-color: #ff8426;">
+                        <table class="row-content stack" align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #ff8426; width: 775px; margin: 0 auto;">
+                          <tbody>
                             <tr>
-                              <td class="pad" style="background-color: #ff8426;">
-                                <div style="color:#ffffff; font-family:Arial, Helvetica, sans-serif;font-size:16px;font-weight:400; line-height:1.2;text-align:center;">
-                                  <p style="margin: 0;">Nous vous recontacterons pour prendre rendez-vous afin de vous présenter les résultats de votre diagnostic</p>
-                                </div>
+                              <td class="column column-1" width="100%" style="background-color: #ff8426; padding-bottom: 30px; vertical-align: top;">
+                                <table class="paragraph_block block-1" width="100%" border="0" cellpadding="10" cellspacing="0" role="presentation" style="background-color: #ff8426;">
+                                  <tr>
+                                    <td class="pad" style="background-color: #ff8426;">
+                                      <div style="color:#ffffff; font-family:Arial, Helvetica, sans-serif;font-size:16px;font-weight:400; line-height:1.2;text-align:center;">
+                                        <p style="margin: 0;">Nous vous recontacterons pour prendre rendez-vous afin de vous présenter les résultats de votre diagnostic</p>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                </table>
                               </td>
                             </tr>
-                          </table>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <!-- BLOC LINKEDIN LIVE -->
-          <table class="row row-4" align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #e7faf8;">
-            <tbody>
-              <tr>
-                <td style="background-color: #e7faf8;">
-                  <table class="row-content stack" align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #e7faf8; width: 775px; margin: 0 auto;">
-                    <tbody>
-                      <tr>
-                        <td class="column column-1" width="100%" style="background-color: #e7faf8; padding-bottom: 40px; padding-left: 20px; padding-right: 20px; padding-top: 50px; vertical-align: top;">
-                          <table class="image_block block-1" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #e7faf8;">
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <!-- BLOC LINKEDIN LIVE -->
+                <table class="row row-4" align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #e7faf8;">
+                  <tbody>
+                    <tr>
+                      <td style="background-color: #e7faf8;">
+                        <table class="row-content stack" align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #e7faf8; width: 775px; margin: 0 auto;">
+                          <tbody>
                             <tr>
-                              <td class="pad" style="background-color: #e7faf8; padding-bottom:10px;width:100%;padding-right:0px;padding-left:0px;">
-                                <div class="alignment" align="center">
-                                  <div class="fullWidth" style="max-width: 515px;">
-                                    <img src="https://0a924af5d3.imgdist.com/pub/bfra/5yitdg4a/ciz/0tg/1j2/DE%CC%81COUVREZ%20LES%20REPLAY%20DE%20NOS%20LINKEDIN%20LIVE-4-min.png" style="display: block; height: auto; border: 0; width: 100%; border-radius: 8px; background: #e7faf8;" width="515" alt title height="auto">
-                                  </div>
-                                </div>
+                              <td class="column column-1" width="100%" style="background-color: #e7faf8; padding-bottom: 40px; padding-left: 20px; padding-right: 20px; padding-top: 50px; vertical-align: top;">
+                                <table class="image_block block-1" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #e7faf8;">
+                                  <tr>
+                                    <td class="pad" style="background-color: #e7faf8; padding-bottom:10px;width:100%;padding-right:0px;padding-left:0px;">
+                                      <div class="alignment" align="center">
+                                        <div class="fullWidth" style="max-width: 515px;">
+                                          <img src="https://0a924af5d3.imgdist.com/pub/bfra/5yitdg4a/ciz/0tg/1j2/DE%CC%81COUVREZ%20LES%20REPLAY%20DE%20NOS%20LINKEDIN%20LIVE-4-min.png" style="display: block; height: auto; border: 0; width: 100%; border-radius: 8px; background: #e7faf8;" width="515" alt title height="auto">
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                </table>
+                                <table class="heading_block block-2" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #e7faf8;">
+                                  <tr>
+                                    <td class="pad" style="background-color: #e7faf8; padding-bottom:10px;padding-top:20px;text-align:center;width:100%;">
+                                      <h2 style="margin: 0; color: #2c6474; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 24px; font-weight: 700; line-height: 1.5; text-align: left;">
+                                        Découvrez nos LinkedIn Live
+                                      </h2>
+                                    </td>
+                                  </tr>
+                                </table>
+                                <table class="paragraph_block block-3" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #e7faf8;">
+                                  <tr>
+                                    <td class="pad" style="background-color: #e7faf8;">
+                                      <div style="color:#444a5b; font-family:Arial, 'Helvetica Neue', Helvetica, sans-serif;font-size:16px;font-weight:400;line-height:1.5;text-align:left;">
+                                        <p style="margin: 0;">Vous avez manqué notre dernier LinkedIn Live ?&nbsp;</p>
+                                        <p style="margin: 0;">Pas de panique, les replays sont disponibles ! 😉</p>
+                                        <p style="margin: 0;">(Re)découvrez les échanges, les retours d'expériences concrets et les conseils partagés par nos intervenants.&nbsp;</p>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                </table>
+                                <table class="button_block block-4" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #e7faf8;">
+                                  <tr>
+                                    <td class="pad" style="background-color: #e7faf8; padding-bottom:10px;padding-top:20px;text-align:center;">
+                                      <div class="alignment" align="center">
+                                        <!--[if mso]>
+                                        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word"  href="https://www.youtube.com/@Orkestra-data-krialys"  style="height:60px;width:235px;v-text-anchor:middle;" arcsize="17%" fillcolor="#00b0a6">
+                                          <v:stroke dashstyle="Solid" weight="0px" color="#7747FF"/>
+                                          <w:anchorlock/>
+                                          <v:textbox inset="0px,0px,0px,0px">
+                                            <center dir="false" style="color:#ffffff;font-family:Arial, sans-serif;font-size:17px">
+                                        <![endif]-->
+                                        <a href="https://www.youtube.com/@Orkestra-data-krialys" target="_blank" style="background-color: #00b0a6; border-radius: 10px; color: #ffffff; display: inline-block; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 17px; font-weight: 400; padding: 13px 50px; text-align: center; text-decoration: none; letter-spacing: normal; word-break: keep-all; line-height: 34px;">
+                                          Nos LinkedIn Live
+                                        </a>
+                                        <!--[if mso]>
+                                            </center>
+                                          </v:textbox>
+                                        </v:roundrect>
+                                        <![endif]-->
+                                      </div>
+                                    </td>
+                                  </tr>
+                                </table>
                               </td>
                             </tr>
-                          </table>
-                          <table class="heading_block block-2" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #e7faf8;">
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <!-- BLOC CONTACT -->
+                <table class="row row-5" align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #e7faf8;">
+                  <tbody>
+                    <tr>
+                      <td style="background-color: #e7faf8;">
+                        <table class="row-content stack" align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #e7faf8; width: 775px; margin: 0 auto;">
+                          <tbody>
                             <tr>
-                              <td class="pad" style="background-color: #e7faf8; padding-bottom:10px;padding-top:20px;text-align:center;width:100%;">
-                                <h2 style="margin: 0; color: #2c6474; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 24px; font-weight: 700; line-height: 1.5; text-align: left;">
-                                  Découvrez nos LinkedIn Live
-                                </h2>
-                              </td>
-                            </tr>
-                          </table>
-                          <table class="paragraph_block block-3" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #e7faf8;">
-                            <tr>
-                              <td class="pad" style="background-color: #e7faf8;">
-                                <div style="color:#444a5b; font-family:Arial, 'Helvetica Neue', Helvetica, sans-serif;font-size:16px;font-weight:400;line-height:1.5;text-align:left;">
-                                  <p style="margin: 0;">Vous avez manqué notre dernier LinkedIn Live ?&nbsp;</p>
-                                  <p style="margin: 0;">Pas de panique, les replays sont disponibles ! 😉</p>
-                                  <p style="margin: 0;">(Re)découvrez les échanges, les retours d'expériences concrets et les conseils partagés par nos intervenants.&nbsp;</p>
-                                </div>
-                              </td>
-                            </tr>
-                          </table>
-                          <table class="button_block block-4" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #e7faf8;">
-                            <tr>
-                              <td class="pad" style="background-color: #e7faf8; padding-bottom:10px;padding-top:20px;text-align:center;">
-                                <div class="alignment" align="center">
-                                  <!--[if mso]>
-                                  <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word"  href="https://www.youtube.com/@Orkestra-data-krialys"  style="height:60px;width:235px;v-text-anchor:middle;" arcsize="17%" fillcolor="#00b0a6">
-                                    <v:stroke dashstyle="Solid" weight="0px" color="#7747FF"/>
-                                    <w:anchorlock/>
-                                    <v:textbox inset="0px,0px,0px,0px">
-                                      <center dir="false" style="color:#ffffff;font-family:Arial, sans-serif;font-size:17px">
-                                  <![endif]-->
-                                  <a href="https://www.youtube.com/@Orkestra-data-krialys" target="_blank" style="background-color: #00b0a6; border-radius: 10px; color: #ffffff; display: inline-block; font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif; font-size: 17px; font-weight: 400; padding: 13px 50px; text-align: center; text-decoration: none; letter-spacing: normal; word-break: keep-all; line-height: 34px;">
-                                    Nos LinkedIn Live
-                                  </a>
-                                  <!--[if mso]>
-                                      </center>
-                                    </v:textbox>
-                                  </v:roundrect>
-                                  <![endif]-->
-                                </div>
-                              </td>
-                            </tr>
-                          </table>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <!-- BLOC CONTACT -->
-          <table class="row row-5" align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #e7faf8;">
-            <tbody>
-              <tr>
-                <td style="background-color: #e7faf8;">
-                  <table class="row-content stack" align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #e7faf8; width: 775px; margin: 0 auto;">
-                    <tbody>
-                      <tr>
-                        <td class="column column-1" width="100%" style="background-color: #e7faf8; padding-bottom: 35px; padding-top: 20px; vertical-align: top;">
-                          <table class="html_block block-1" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #e7faf8;">
-                            <tr>
-                              <td class="pad" style="background-color: #e7faf8;">
-                                <div style="font-family:Arial, Helvetica, sans-serif;text-align:center;">
-                                  <table width="100%" cellpadding="0" cellspacing="0" border="0" align="center">
-                                    <tr>
-                                      <td align="center">
-                                        <table width="700" cellpadding="0" cellspacing="0" border="0" style="background-color:#2C6474; border-radius:10px; padding: 10px;">
+                              <td class="column column-1" width="100%" style="background-color: #e7faf8; padding-bottom: 35px; padding-top: 20px; vertical-align: top;">
+                                <table class="html_block block-1" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #e7faf8;">
+                                  <tr>
+                                    <td class="pad" style="background-color: #e7faf8;">
+                                      <div style="font-family:Arial, Helvetica, sans-serif;text-align:center;">
+                                        <table width="100%" cellpadding="0" cellspacing="0" border="0" align="center">
                                           <tr>
-                                            <td align="center" valign="middle" style="padding: 10px;">
-                                              <table cellpadding="0" cellspacing="0" border="0">
+                                            <td align="center">
+                                              <table width="700" cellpadding="0" cellspacing="0" border="0" style="background-color:#2C6474; border-radius:10px; padding: 10px;">
                                                 <tr>
-                                                  <td align="center" style="background-color: #E7FAF8; width: 30px; height: 30px; border-radius: 5px;">
-                                                    <img src="https://i.ibb.co/SDp2ymbF/globe.png" alt="web icon" width="20" height="20" style="display: block;" />
+                                                  <td align="center" valign="middle" style="padding: 10px;">
+                                                    <table cellpadding="0" cellspacing="0" border="0">
+                                                      <tr>
+                                                        <td align="center" style="background-color: #E7FAF8; width: 30px; height: 30px; border-radius: 5px;">
+                                                          <img src="https://i.ibb.co/SDp2ymbF/globe.png" alt="web icon" width="20" height="20" style="display: block;" />
+                                                        </td>
+                                                        <td style="padding-left: 10px;">
+                                                          <a href="https://www.krialys.com" style="color: #DCF5F2; text-decoration: none; font-family: Arial, sans-serif;">www.krialys.com</a>
+                                                        </td>
+                                                      </tr>
+                                                    </table>
                                                   </td>
-                                                  <td style="padding-left: 10px;">
-                                                    <a href="https://www.krialys.com" style="color: #DCF5F2; text-decoration: none; font-family: Arial, sans-serif;">www.krialys.com</a>
+                                                  <td align="center" valign="middle" style="padding: 10px;">
+                                                    <table cellpadding="0" cellspacing="0" border="0">
+                                                      <tr>
+                                                        <td align="center" style="background-color: #E7FAF8; width: 30px; height: 30px; border-radius: 5px;">
+                                                          <img src="https://i.ibb.co/yc2zKH52/call.png" alt="phone icon" width="20" height="20" style="display: block;" />
+                                                        </td>
+                                                        <td style="padding-left: 10px;">
+                                                          <span style="color: #DCF5F2; font-family: Arial, sans-serif;">06 50 11 55 80</span>
+                                                        </td>
+                                                      </tr>
+                                                    </table>
                                                   </td>
-                                                </tr>
-                                              </table>
-                                            </td>
-                                            <td align="center" valign="middle" style="padding: 10px;">
-                                              <table cellpadding="0" cellspacing="0" border="0">
-                                                <tr>
-                                                  <td align="center" style="background-color: #E7FAF8; width: 30px; height: 30px; border-radius: 5px;">
-                                                    <img src="https://i.ibb.co/yc2zKH52/call.png" alt="phone icon" width="20" height="20" style="display: block;" />
-                                                  </td>
-                                                  <td style="padding-left: 10px;">
-                                                    <span style="color: #DCF5F2; font-family: Arial, sans-serif;">06 50 11 55 80</span>
-                                                  </td>
-                                                </tr>
-                                              </table>
-                                            </td>
-                                            <td align="center" valign="middle" style="padding: 10px;">
-                                              <table cellpadding="0" cellspacing="0" border="0">
-                                                <tr>
-                                                  <td align="center" style="background-color: #E7FAF8; width: 30px; height: 30px; border-radius: 5px;">
-                                                    <img src="https://i.ibb.co/Csnk41fY/email.png" alt="mail icon" width="20" height="20" style="display: block;" />
-                                                  </td>
-                                                  <td style="padding-left: 10px;">
-                                                    <a href="mailto:symphony@krialys.com" style="color: #DCF5F2; text-decoration: none; font-family: Arial, sans-serif;">symphony@krialys.com</a>
+                                                  <td align="center" valign="middle" style="padding: 10px;">
+                                                    <table cellpadding="0" cellspacing="0" border="0">
+                                                      <tr>
+                                                        <td align="center" style="background-color: #E7FAF8; width: 30px; height: 30px; border-radius: 5px;">
+                                                          <img src="https://i.ibb.co/Csnk41fY/email.png" alt="mail icon" width="20" height="20" style="display: block;" />
+                                                        </td>
+                                                        <td style="padding-left: 10px;">
+                                                          <a href="mailto:symphony@krialys.com" style="color: #DCF5F2; text-decoration: none; font-family: Arial, sans-serif;">symphony@krialys.com</a>
+                                                        </td>
+                                                      </tr>
+                                                    </table>
                                                   </td>
                                                 </tr>
                                               </table>
                                             </td>
                                           </tr>
                                         </table>
-                                      </td>
-                                    </tr>
-                                  </table>
-                                </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                </table>
                               </td>
                             </tr>
-                          </table>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <!-- FOOTER ORANGE -->
-          <table class="row row-6" align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #ff8426;">
-            <tbody>
-              <tr>
-                <td style="background-color: #ff8426;">
-                  <table class="row-content stack" align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #ff8426; width: 775px; margin: 0 auto;">
-                    <tbody>
-                      <tr>
-                        <td class="column column-1" width="100%" style="background-color: #ff8426; padding-bottom: 5px; padding-top: 15px; vertical-align: top;">
-                          <table class="html_block block-1" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #ff8426;">
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <!-- FOOTER ORANGE -->
+                <table class="row row-6" align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #ff8426;">
+                  <tbody>
+                    <tr>
+                      <td style="background-color: #ff8426;">
+                        <table class="row-content stack" align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #ff8426; width: 775px; margin: 0 auto;">
+                          <tbody>
                             <tr>
-                              <td class="pad" style="background-color: #ff8426;">
-                                <div style="width: 100%; background-color: #FF8426; padding: 10px 0; text-align: center;">
-                                  &nbsp;
-                                </div>
+                              <td class="column column-1" width="100%" style="background-color: #ff8426; padding-bottom: 5px; padding-top: 15px; vertical-align: top;">
+                                <table class="html_block block-1" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #ff8426;">
+                                  <tr>
+                                    <td class="pad" style="background-color: #ff8426;">
+                                      <div style="width: 100%; background-color: #FF8426; padding: 10px 0; text-align: center;">
+                                        &nbsp;
+                                      </div>
+                                    </td>
+                                  </tr>
+                                </table>
                               </td>
                             </tr>
-                          </table>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </td>
-      </tr>
-    </tbody>
-  </table>
-</body>
-</html>
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </body>
+      </html>
       `,
     };
 
@@ -478,11 +546,10 @@ if (allScoredRows.length > 0) {
 // Submit route for radar forms
 app.post("/submit-radar", async (req, res) => {
   try {
-
     console.dir(req.body, { depth: null });
     const { questions, comment, globalAverage, formNum } = req.body;
 
-    // 🧠 1. Titre du formulaire
+    // Titre du formulaire
     const formTitles = {
       1: "Évaluation Stratégique et Organisationnelle",
       2: "Évaluation Opérationnelle Métiers",
@@ -492,7 +559,7 @@ app.post("/submit-radar", async (req, res) => {
 
     const { user = {} } = req.body;
 
-    // 📊 3. Format HTML du tableau récapitulatif
+    // Format HTML du tableau récapitulatif
     let rows = "";
     questions.forEach(theme => {
       theme.responses.forEach(r => {
@@ -505,14 +572,14 @@ app.post("/submit-radar", async (req, res) => {
     });
 
     const html = `
-      <h2 style="font-family:sans-serif;">Nouveau diagnostic de maturité reçu pour ${user.company}: ${formTitle}</h2>
+      <h2 style="font-family:sans-serif;">Nouveau diagnostic de maturité reçu pour ${user.company || "Entreprise inconnue"} : ${formTitle}</h2>
       <p><strong>Nom :</strong> ${user.lastName || "Non renseigné"}</p>
-       <p><strong>Prénom:</strong> ${user.firstName || "Non renseigné"}</p>
+      <p><strong>Prénom:</strong> ${user.firstName || "Non renseigné"}</p>
       <p><strong>Email :</strong> ${user.email || "Non renseigné"}</p>
       <p><strong>Téléphone :</strong> ${user.phone || "Non renseigné"}</p>
       <p><strong>Entreprise :</strong> ${user.company || "Non renseigné"}</p>
       <p><strong>Note moyenne :</strong> ${globalAverage || "N/A"}</p>
-      <p><strong>Commentaire :</strong> ${comment || ""}</p>
+      <p><strong>Commentaire :</strong> ${comment || "<em>Aucun commentaire</em>"}</p>
       <h3 style="font-family:sans-serif;margin-top:2rem;">Détail des réponses :</h3>
       <table style="border-collapse:collapse;width:100%;font-family:sans-serif;">
         <thead>
@@ -525,6 +592,42 @@ app.post("/submit-radar", async (req, res) => {
         <tbody>${rows}</tbody>
       </table>
     `;
+
+    // Génération du fichier Excel 
+    const workbook = new ExcelJS.Workbook();
+
+    // Feuille 1 : Réponses
+    const sheet1 = workbook.addWorksheet("Réponses");
+    sheet1.columns = [
+      { header: "Thème", key: "theme", width: 30 },
+      { header: "Question", key: "question", width: 80 },
+      { header: "Note", key: "note", width: 10 }
+    ];
+    questions.forEach(theme => {
+      theme.responses.forEach(r => {
+        sheet1.addRow({
+          theme: theme.theme,
+          question: r.question,
+          note: parseFloat(r.note)
+        });
+      });
+    });
+
+    // Feuille 2 : Informations utilisateur
+    const sheet2 = workbook.addWorksheet("Informations");
+    sheet2.addRow(["Champ", "Valeur"]);
+    sheet2.addRow(["Prénom", user.firstName || ""]);
+    sheet2.addRow(["Nom", user.lastName || ""]);
+    sheet2.addRow(["Email", user.email || ""]);
+    sheet2.addRow(["Téléphone", user.phone || ""]);
+    sheet2.addRow(["Entreprise", user.company || ""]);
+    sheet2.addRow(["Note moyenne", globalAverage || ""]);
+    sheet2.addRow(["Commentaire", comment || ""]);
+
+    // const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const fileName = `radar-${clean(formTitle)}.xlsx`;
+    const filePath = path.join(__dirname, "data", fileName);
+    await workbook.xlsx.writeFile(filePath);
 
     // Configuration transporteur
     const transporter = nodemailer.createTransport({
@@ -543,6 +646,18 @@ app.post("/submit-radar", async (req, res) => {
       to: process.env.ADMIN_BCC_EMAIL,
       subject: `Radar de maturité - ${formTitle}`,
       html,
+      attachments: [
+        {
+          filename: "radar-.xlsx",
+          path: filePath,
+          contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        }
+      ]
+    });
+
+    // Nettoyage du fichier Excel après envoi
+    fs.unlink(filePath, err => {
+      if (err) console.error("❌ Erreur suppression Excel radar :", err);
     });
 
     res.status(200).json({ message: "Radar de maturité envoyé avec succès" });
