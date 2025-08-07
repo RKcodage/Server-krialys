@@ -114,14 +114,20 @@ app.post("/submit", async (req, res) => {
     const isScored = Array.isArray(responses) && responses.every(r => "note" in r && "question" in r);
     if (isScored) {
       responses.forEach(r => {
+        const parts = r.question.match(/^(\d+)[^\w]*(.*)$/);
+        const number = parts ? parts[1] : "";
+        const questionText = parts ? parts[2] : r.question;
+      
         allScoredRows.push(`
           <tr>
             <td style="padding: 8px; border: 1px solid #ccc;">${theme}</td>
-            <td style="padding: 8px; border: 1px solid #ccc;">${r.question}</td>
+            <td style="padding: 8px; border: 1px solid #ccc; text-align:center;">${number}</td>
+            <td style="padding: 8px; border: 1px solid #ccc;">${questionText}</td>
             <td style="padding: 8px; border: 1px solid #ccc; text-align:center;">${parseFloat(r.note)}</td>
           </tr>
         `);
       });
+      
     }
   });
 
@@ -133,6 +139,7 @@ app.post("/submit", async (req, res) => {
         <thead>
           <tr style="background-color: #333; color: white;">
             <th style="padding: 8px; border: 1px solid #ccc;">Thème</th>
+             <th style="padding: 8px; border: 1px solid #ccc;">N°</th>
             <th style="padding: 8px; border: 1px solid #ccc;">Question</th>
             <th style="padding: 8px; border: 1px solid #ccc;">Note</th>
           </tr>
@@ -171,6 +178,7 @@ const workbook = new ExcelJS.Workbook();
 const sheetResponses = workbook.addWorksheet("Réponses par thématique");
 sheetResponses.columns = [
   { header: "Thème", key: "theme", width: 30 },
+  { header: "N°", key: "number", width: 10 },
   { header: "Question", key: "question", width: 80 },
   { header: "Note", key: "note", width: 10 },
 ];
@@ -179,11 +187,17 @@ Object.entries(data).forEach(([theme, responses]) => {
   const isScored = Array.isArray(responses) && responses.every(r => "note" in r && "question" in r);
   if (isScored) {
     responses.forEach(r => {
-      sheetResponses.addRow({
-        theme,
-        question: r.question,
-        note: parseFloat(r.note),
-      });
+      const parts = r.question.match(/^(\d+)[^\w]*(.*)$/);
+const number = parts ? parts[1] : "";
+const questionText = parts ? parts[2] : r.question;
+
+sheetResponses.addRow({
+  theme,
+  number,
+  question: questionText,
+  note: parseFloat(r.note),
+});
+
     });
   }
 });
