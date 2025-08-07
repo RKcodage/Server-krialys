@@ -563,11 +563,17 @@ app.post("/submit-radar", async (req, res) => {
     let rows = "";
     questions.forEach(theme => {
       theme.responses.forEach(r => {
+        const questionParts = r.question.match(/^(\d+)[^\w]*(.*)$/);
+        const questionNumber = questionParts ? questionParts[1] : "";
+        const questionText = questionParts ? questionParts[2] : r.question;
+
         rows += `<tr>
           <td style="border:1px solid #ddd;padding:8px;">${theme.theme}</td>
-          <td style="border:1px solid #ddd;padding:8px;">${r.question}</td>
+          <td style="border:1px solid #ddd;padding:8px; text-align:center;">${questionNumber}</td>
+          <td style="border:1px solid #ddd;padding:8px;">${questionText}</td>
           <td style="border:1px solid #ddd;padding:8px;text-align:center;">${r.note}</td>
         </tr>`;
+
       });
     });
 
@@ -585,6 +591,7 @@ app.post("/submit-radar", async (req, res) => {
         <thead>
           <tr>
             <th style="border:1px solid #ddd;padding:8px;background:#eee;">Thème</th>
+            <th style="border:1px solid #ddd;padding:8px;background:#eee;">N°</th>
             <th style="border:1px solid #ddd;padding:8px;background:#eee;">Question</th>
             <th style="border:1px solid #ddd;padding:8px;background:#eee;">Note</th>
           </tr>
@@ -600,16 +607,23 @@ app.post("/submit-radar", async (req, res) => {
     const sheet1 = workbook.addWorksheet("Réponses");
     sheet1.columns = [
       { header: "Thème", key: "theme", width: 30 },
+      { header: "N°", key: "number", width: 10 },
       { header: "Question", key: "question", width: 80 },
       { header: "Note", key: "note", width: 10 }
     ];
     questions.forEach(theme => {
       theme.responses.forEach(r => {
+        const parts = r.question.match(/^(\d+)[^\w]*(.*)$/);
+        const number = parts ? parts[1] : "";
+        const questionText = parts ? parts[2] : r.question;
+        
         sheet1.addRow({
           theme: theme.theme,
-          question: r.question,
+          number,
+          question: questionText,
           note: parseFloat(r.note)
         });
+        
       });
     });
 
